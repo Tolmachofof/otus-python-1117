@@ -38,7 +38,7 @@ class Parser:
             r'\[(?P<time_local>.+)\]\s+'
             r'"(?P<request>.*?)"\s+'
             r'(?P<status>\d{3})\s+'
-            '(?P<body_bytes_sent>\d+)\s+'
+            r'(?P<body_bytes_sent>\d+)\s+'
             r'"(?P<http_referer>.+)"\s+'
             r'"(?P<http_user_agent>.+)"\s+'
             r'"(?P<http_x_forwarded_for>.+)"\s+'
@@ -150,17 +150,18 @@ class LogAnalyzer:
             if log is None:
                 return
             
-            report_name = self.get_report_name(log)
-            if not os.path.exists(os.path.join(report_dir, report_name)):
-                with open(log, 'r', encoding='utf-8') as f:
-                    for url, r_time in (self.parser.parse(line) for line in f):
-                        if url is not None and r_time is not None:
-                            self.report.add(url, r_time)
-                        else:
-                            return
-                        
-                self.report.save(os.path.join(report_dir, report_name),
-                                 report_size)
+        report_name = self.get_report_name(log)
+        if os.path.exists(os.path.join(report_dir, report_name)):
+            return
+
+        with open(log, 'r', encoding='utf-8') as f:
+            for url, r_time in (self.parser.parse(line) for line in f):
+                if url is not None and r_time is not None:
+                    self.report.add(url, r_time)
+                else:
+                    return
+        self.report.save(os.path.join(report_dir, report_name), report_size)
+
 
 def main():
     pass

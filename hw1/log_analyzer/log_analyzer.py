@@ -13,6 +13,7 @@ import glob
 import json
 import re
 import logging
+import gzip
 from decimal import Decimal
 from collections import defaultdict
 
@@ -139,28 +140,40 @@ class LogAnalyzer:
         except ValueError:
             return
         
-    def get_report_name(self, log):
+    def get_report_name(self, log_name):
         re_time = re.compile(r'(?P<Y>\d{4})(?P<m>\d{2})(?P<d>\d{2})')
-        log_time = re_time.search(log).groupdict()
+        log_time = re_time.search(log_name).groupdict()
         return 'report-{Y}.{m}.{d}.html'.format(**log_time)
+
+    def open_log(self, log_path):
+        if log_path.endswith('gz'):
+            log_file = gzip.open(log_path, 'rb', encoding='utf-8')
+        else:
+            log_file = open(log_path, 'r', encoding='utf-8')
+        for line in log_file:
+            yield line
+        log_file.close()
 
     def create_report(self, logs_dir, report_dir, report_size):
         if os.path.exists(logs_dir):
-            log = self.scan_dir(logs_dir)
-            if log is None:
+            log_name = self.scan_dir(logs_dir)
+            if log_name is None:
                 return
             
-        report_name = self.get_report_name(log)
-        if os.path.exists(os.path.join(report_dir, report_name)):
-            return
-
-        with open(log, 'r', encoding='utf-8') as f:
-            for url, r_time in (self.parser.parse(line) for line in f):
-                if url is not None and r_time is not None:
-                    self.report.add(url, r_time)
+        report_name = self.get_report_name(log_name)
+        log_path = os.path.join(logs_dir, log_name)
+        
+        if not os.path.exists(os.path.join(report_dir, report_name)):
+            for url, time in (self.parser.parse(line)
+                              for line in self.open_log(log_path)):
+                if url is not None and time is not None:
+                    self.report.add(url, time)
                 else:
-                    return
-        self.report.save(os.path.join(report_dir, report_name), report_size)
+                    continue
+                
+            self.report.save(
+                os.path.join(report_dir, report_name), report_size
+            )
 
 
 def main():

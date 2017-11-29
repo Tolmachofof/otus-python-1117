@@ -224,21 +224,10 @@ class LogAnalyzer:
 
 if __name__ == "__main__":
 
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    handler = logging.StreamHandler()
-    handler.setFormatter(
-        logging.Formatter(
-            fmt='[%(asctime)s] %(levelname).1s %(message)s',
-            datefmt='%Y.%m.%d %H:%M:%S'
-        )
-    )
-    logger.addHandler(handler)
-
     import time
     from datetime import datetime
     import argparse
-    from configparser import RawConfigParser
+    from configparser import RawConfigParser, NoOptionError
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -255,9 +244,24 @@ if __name__ == "__main__":
     reports_dir = config_parser.get('log_analyzer', 'report_dir')
     logs_dir = config_parser.get('log_analyzer', 'log_dir')
     ts_file = config_parser.get('log_analyzer', 'ts_file')
+    try:
+        log_file = config_parser.get('log_analyzer', 'log_file')
+        handler = logging.FileHandler(log_file)
+    except NoOptionError:
+        handler = logging.StreamHandler()
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    handler.setFormatter(
+        logging.Formatter(
+            fmt='[%(asctime)s] %(levelname).1s %(message)s',
+            datefmt='%Y.%m.%d %H:%M:%S'
+        )
+    )
+    logger.addHandler(handler)
 
     start_time = datetime.now()
-
     logs_analyzer = LogAnalyzer()
     report = logs_analyzer.create_report(logs_dir, reports_dir, reports_size)
 

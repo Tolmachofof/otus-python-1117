@@ -7,13 +7,13 @@
 #                     '"$http_user_agent" "$http_x_forwarded_for" "$http_X_REQUEST_ID" "$http_X_RB_USER" '
 #                     '$request_time';
 
-
 import os
 import glob
 import json
 import re
 import logging
 import gzip
+import statistics
 from decimal import Decimal
 from collections import defaultdict
 
@@ -27,6 +27,19 @@ config = {
     "REPORT_DIR": "./reports",
     "LOG_DIR": "./log"
 }
+
+
+class Median:
+
+    def __init__(self, items=None, ndigits=2):
+        self.items = items if items is not None else []
+        self.ndigits = ndigits
+
+    def add(self, item):
+        self.items.append(item)
+
+    def __call__(self):
+        return round(statistics.median(self.items), self.ndigits)
 
 
 class Parser:
@@ -51,11 +64,14 @@ class Parser:
     def _parse_url(self, request):
         try:
             return request.split(' ')[1]
-        except IndexError:
+        except (IndexError, AttributeError):
             return request
 
     def _parse_request_time(self, request_time):
-        return float(request_time)
+        try:
+            return float(request_time)
+        except TypeError:
+            return float(0)
 
     def parse(self, log_entry):
         result = re.match(self.pattern, log_entry)
@@ -81,6 +97,8 @@ class UrlsReport:
     def _get_mid(self, total, count):
         return round(total / count, self.ndigits)
 
+
+
     def add(self, url, request_time):
         self._count_requests += 1
         self._all_requests_time = round(
@@ -101,6 +119,7 @@ class UrlsReport:
             self.entries[url]['time_avg'] = lambda: self._get_mid(
                 self.entries[url]['time_sum'], self.entries[url]['count']
             )
+            self.entries[url]['time_med'] = Median(ndigits=self.ndigits)
 
         self.entries[url]['count'] += 1
         self.entries[url]['time_sum'] = round(
@@ -109,6 +128,7 @@ class UrlsReport:
         )
         if Decimal(request_time) > Decimal(self.entries[url]['time_max']):
             self.entries[url]['time_max'] = request_time
+        self.entries[url]['time_med'].add(request_time)
 
     def to_json(self, report_size):
         return json.dumps(
@@ -166,7 +186,7 @@ class LogAnalyzer:
         if not os.path.exists(os.path.join(report_dir, report_name)):
             for url, time in (self.parser.parse(line)
                               for line in self.open_log(log_path)):
-                if url is not None and time is not None:
+                if url is not None:
                     self.report.add(url, time)
                 else:
                     continue

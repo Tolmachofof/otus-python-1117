@@ -16,10 +16,10 @@ import gzip
 import statistics
 from decimal import Decimal
 from collections import defaultdict
+from functools import wraps
 
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 
 config = {
@@ -27,6 +27,23 @@ config = {
     "REPORT_DIR": "./reports",
     "LOG_DIR": "./log"
 }
+
+
+def log_it(level):
+    def deco(fn):
+
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            try:
+                logging.log(level, "Started: {}".format(fn.__name__))
+                result = fn(*args, **kwargs)
+                logging.log(level, "Finished: {}".format(fn.__name__))
+                return result
+            except Exception as exc:
+                logging.exception("Error in {}".format(fn.__name__))
+                raise exc
+        return wrapper
+    return deco
 
 
 class Median:
@@ -65,12 +82,16 @@ class Parser:
         try:
             return request.split(' ')[1]
         except (IndexError, AttributeError):
+            logging.error('Can not parse url: {}.'.format(request))
             return request
 
     def _parse_request_time(self, request_time):
         try:
             return float(request_time)
         except TypeError:
+            logging.error(
+                'Can not convert {} to request time.'.format(request_time)
+            )
             return float(0)
 
     def parse(self, log_entry):
@@ -96,8 +117,6 @@ class UrlsReport:
 
     def _get_mid(self, total, count):
         return round(total / count, self.ndigits)
-
-
 
     def add(self, url, request_time):
         self._count_requests += 1
@@ -138,6 +157,7 @@ class UrlsReport:
             default=lambda lazy_object: lazy_object()
         )
 
+    @log_it(logging.INFO)
     def save(self, report_path, report_size):
         with open('./templates/report.html', 'r', encoding='utf-8') as f:
             template = f.read()
@@ -158,6 +178,7 @@ class LogAnalyzer:
         try:
             return max(log_files, key=lambda file: os.stat(file).st_mtime)
         except ValueError:
+            logging.error('Directory {dir} is empty'.format(dir=logs_dir))
             return
         
     def get_report_name(self, log_name):
@@ -174,10 +195,14 @@ class LogAnalyzer:
             yield line
         log_file.close()
 
+    @log_it(logging.INFO)
     def create_report(self, logs_dir, report_dir, report_size):
         if os.path.exists(logs_dir):
             log_name = self.scan_dir(logs_dir)
             if log_name is None:
+                logging.warning(
+                    'File {} has been already handled.'.format(log_name)
+                )
                 return
             
         report_name = self.get_report_name(log_name)
@@ -189,11 +214,16 @@ class LogAnalyzer:
                 if url is not None:
                     self.report.add(url, time)
                 else:
+                    logging.warning('Can not handle url: {}.'.format(url))
                     continue
-                
             self.report.save(
                 os.path.join(report_dir, report_name), report_size
             )
+            logging.info(
+                'Log {} has been successfully created!'.format(report_name)
+            )
+        else:
+            logging.error('Report {} already exists!'.format(report_name))
 
 
 def main():

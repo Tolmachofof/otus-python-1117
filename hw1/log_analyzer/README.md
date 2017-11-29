@@ -31,7 +31,7 @@ python log_analyzer --config=log_analyzer.conf
 python -m unittest test_log_analyzer
 ```
 При отсутствии параметра --config при вызове скрипта используется conf файл из директории: 
-/usr/local/etc/log_nalyzer.conf
+/usr/local/etc/log_analyzer.conf
 ### Config format:
 ```
 REPORT_SIZE = 1000 - Количество уникальных URL'ов, которые попадут в отчет.

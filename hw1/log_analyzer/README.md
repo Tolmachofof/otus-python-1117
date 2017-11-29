@@ -1,5 +1,16 @@
 # The Nginx logs analyzer
-
+Парсер логов nginx.
+По итогам своей работы создает отчет report-{datetime}.html, 
+который содержит сводную статистику для каждого URL из лога:
+```
+count - сколько раз встречается URL, абсолютное значение
+count_perc - сколько раз встречается URL, в процентнах относительно общего числа запросов
+time_sum - суммарный $request_time для данного URL'а, абсолютное значение
+time_perc - суммарный $request_time для данного URL'а, в процентах относительно общего $request_time всех запросов
+time_avg - средний $request_time для данного URL'а
+time_max - максимальный $request_time для данного URL'а
+time_med - медиана $request_time для данного URL'а
+```
 ## Python requirements
 Python 3.5 or later.
 
@@ -18,4 +29,13 @@ python log_analyzer --config=log_analyzer.conf
 ### Running the tests
 ```
 python -m unittest test_log_analyzer
+```
+При отсутствии параметра --config при вызове скрипта используется conf файл из директории: 
+/usr/local/etc/log_nalyzer.conf
+### Config format:
+```
+REPORT_SIZE = 1000 - Количество уникальных URL'ов, которые попадут в отчет.
+REPORT_DIR =./reports - Папка с шаблоном отчета.
+LOG_DIR = ./log - Папка с логами nginx.
+TS_FILE = ./log_analyzer.ts - TS файл с датой последнего запуска скрипта.
 ```

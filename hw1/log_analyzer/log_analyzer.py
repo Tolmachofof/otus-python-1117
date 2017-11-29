@@ -29,9 +29,9 @@ def log_it(level):
         @wraps(fn)
         def wrapper(*args, **kwargs):
             try:
-                logging.log(level, "Started: {}".format(fn.__name__))
+                logging.log(level, "Started: {}.".format(fn.__name__))
                 result = fn(*args, **kwargs)
-                logging.log(level, "Finished: {}".format(fn.__name__))
+                logging.log(level, "Finished: {}.".format(fn.__name__))
                 return result
             except Exception as exc:
                 logging.exception("Error in {}".format(fn.__name__))
@@ -212,12 +212,12 @@ class LogAnalyzer:
                 else:
                     logging.warning('Can not handle url: {}.'.format(url))
                     continue
-            self.report.save(
-                os.path.join(report_dir, report_name), report_size
-            )
+            report_path = os.path.join(report_dir, report_name)
+            self.report.save(report_path, report_size)
             logging.info(
                 'Log {} has been successfully created!'.format(report_name)
             )
+            return report_path
         else:
             logging.error('Report {} already exists!'.format(report_name))
 
@@ -259,17 +259,19 @@ if __name__ == "__main__":
     start_time = datetime.now()
 
     logs_analyzer = LogAnalyzer()
-    logs_analyzer.create_report(logs_dir, reports_dir, reports_size)
+    report = logs_analyzer.create_report(logs_dir, reports_dir, reports_size)
 
-    end_time = datetime.now()
+    if report is not None:
+        end_time = datetime.now()
 
-    with open(ts_file, 'w', encoding='utf-8') as f:
-        f.write(end_time.strftime('%Y.%m.%d %H:%M:%S'))
+        with open(ts_file, 'w', encoding='utf-8') as f:
+            f.write(end_time.strftime('%Y.%m.%d %H:%M:%S'))
 
-    os.utime(
-        ts_file,
-        (
-            time.mktime(start_time.timetuple()),
-            time.mktime(end_time.timetuple())
+        os.utime(
+            ts_file,
+            (
+                time.mktime(start_time.timetuple()),
+                time.mktime(end_time.timetuple())
+            )
         )
-    )
+

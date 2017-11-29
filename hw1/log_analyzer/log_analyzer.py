@@ -7,6 +7,7 @@
 #                     '"$http_user_agent" "$http_x_forwarded_for" "$http_X_REQUEST_ID" "$http_X_RB_USER" '
 #                     '$request_time';
 
+
 import os
 import glob
 import json
@@ -19,14 +20,7 @@ from collections import defaultdict
 from functools import wraps
 
 
-logging.basicConfig(level=logging.DEBUG)
-
-
-config = {
-    "REPORT_SIZE": 1000,
-    "REPORT_DIR": "./reports",
-    "LOG_DIR": "./log"
-}
+__all__ = ('Parser', 'UrlsReport', 'LogAnalyzer')
 
 
 def log_it(level):
@@ -101,7 +95,7 @@ class Parser:
             self._parse_url(result.get('request')),
             self._parse_request_time(result.get('request_time'))
         )
-        
+
 
 class UrlsReport:
 
@@ -161,7 +155,7 @@ class UrlsReport:
     def save(self, report_path, report_size):
         with open('./templates/report.html', 'r', encoding='utf-8') as f:
             template = f.read()
-            
+
         template = template.replace('$table_json', self.to_json(report_size))
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(template)
@@ -180,10 +174,10 @@ class LogAnalyzer:
         except ValueError:
             logging.error('Directory {dir} is empty'.format(dir=logs_dir))
             return
-        
-    def get_report_name(self, log_name):
+
+    def get_report_name(self, log_path):
         re_time = re.compile(r'(?P<Y>\d{4})(?P<m>\d{2})(?P<d>\d{2})')
-        log_time = re_time.search(log_name).groupdict()
+        log_time = re_time.search(log_path).groupdict()
         return 'report-{Y}.{m}.{d}.html'.format(**log_time)
 
     def open_log(self, log_path):
@@ -198,16 +192,18 @@ class LogAnalyzer:
     @log_it(logging.INFO)
     def create_report(self, logs_dir, report_dir, report_size):
         if os.path.exists(logs_dir):
-            log_name = self.scan_dir(logs_dir)
-            if log_name is None:
+            log_path = self.scan_dir(logs_dir)
+            if log_path is None:
                 logging.warning(
-                    'File {} has been already handled.'.format(log_name)
+                    'File {} has been already handled.'.format(log_path)
                 )
                 return
-            
-        report_name = self.get_report_name(log_name)
-        log_path = os.path.join(logs_dir, log_name)
-        
+        else:
+            logging.error('Logs dir: {} is not found.'.format(logs_dir))
+            return
+
+        report_name = self.get_report_name(log_path)
+
         if not os.path.exists(os.path.join(report_dir, report_name)):
             for url, time in (self.parser.parse(line)
                               for line in self.open_log(log_path)):
@@ -226,13 +222,54 @@ class LogAnalyzer:
             logging.error('Report {} already exists!'.format(report_name))
 
 
-def main():
-    pass
-
 if __name__ == "__main__":
 
-    LOG_DIR = '.'
-    REPORT_DIR = '.'
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        logging.Formatter(
+            fmt='[%(asctime)s] %(levelname).1s %(message)s',
+            datefmt='%Y.%m.%d %H:%M:%S'
+        )
+    )
+    logger.addHandler(handler)
 
-    r = LogAnalyzer()
-    r.create_report('.', '.', 1000)
+    import time
+    from datetime import datetime
+    import argparse
+    from configparser import RawConfigParser
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--config', help='Path to the configuration file.',
+        default='/usr/local/etc/log_nalyzer.conf'
+    )
+    args = parser.parse_args()
+    config_path = args.config
+
+    config_parser = RawConfigParser()
+    config_parser.read(config_path)
+
+    reports_size = int(config_parser.get('log_analyzer', 'report_size'))
+    reports_dir = config_parser.get('log_analyzer', 'report_dir')
+    logs_dir = config_parser.get('log_analyzer', 'log_dir')
+    ts_file = config_parser.get('log_analyzer', 'ts_file')
+
+    start_time = datetime.now()
+
+    logs_analyzer = LogAnalyzer()
+    logs_analyzer.create_report(logs_dir, reports_dir, reports_size)
+
+    end_time = datetime.now()
+
+    with open(ts_file, 'w', encoding='utf-8') as f:
+        f.write(end_time.strftime('%Y.%m.%d %H:%M:%S'))
+
+    os.utime(
+        ts_file,
+        (
+            time.mktime(start_time.timetuple()),
+            time.mktime(end_time.timetuple())
+        )
+    )

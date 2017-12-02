@@ -194,7 +194,7 @@ if __name__ == "__main__":
     import time
     from datetime import datetime
     import argparse
-    from configparser import RawConfigParser, NoOptionError
+    from configparser import RawConfigParser
 
     config = parse_args()
     log_file = config.get('log_file')
@@ -202,18 +202,21 @@ if __name__ == "__main__":
         handler = logging.FileHandler(log_file)
     else:
         handler = logging.StreamHandler()
-
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-
-    handler.setFormatter(
-        logging.Formatter(
-            fmt='[%(asctime)s] %(levelname).1s %(message)s',
-            datefmt='%Y.%m.%d %H:%M:%S'
-        )
+    logging.basicConfig(
+        format='[%(asctime)s] %(levelname).1s %(message)s',
+        datefmt='%Y.%m.%d %H:%M:%S',
+        handlers=[handler]
     )
-    logger.addHandler(handler)
 
     start_time = datetime.now()
     main(config['log_dir'], config['report_dir'], config['report_size'])
+    end_time = datetime.now()
+
+    os.utime(
+        config['ts_file'],
+        (
+            time.mktime(start_time.timetuple()),
+            time.mktime(end_time.timetuple())
+        )
+    )
 

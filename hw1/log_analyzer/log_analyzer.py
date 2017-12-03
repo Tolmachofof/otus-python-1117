@@ -131,8 +131,10 @@ def create_report(log_path, r_size=1000):
         r_total += 1
         t_all = round(t_all + r_time, 2)
 
-    result = sorted(report.values(), key=lambda entry: - entry['time_sum'])[:r_size]
-    return json.dumps(result, default=lambda lazy_obj: lazy_obj())
+    result = sorted(
+        report.values(), key=lambda entry: entry['time_sum'], reverse=True
+    )
+    return json.dumps(result[:r_size], default=lambda lazy_obj: lazy_obj())
 
 
 @log_it
@@ -211,7 +213,9 @@ if __name__ == "__main__":
     start_time = datetime.now()
     main(config['log_dir'], config['report_dir'], config['report_size'])
     end_time = datetime.now()
-
+    
+    with open(config['ts_file'], 'w', encoding='utf-8') as f:
+        f.write(end_time.strftime('%Y.%m.%d %H:%M:%S'))
     os.utime(
         config['ts_file'],
         (

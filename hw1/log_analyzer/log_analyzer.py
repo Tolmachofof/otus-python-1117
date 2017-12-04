@@ -123,8 +123,10 @@ def create_report(log_path, r_size=1000):
             report[url]['time_avg'] = lambda: get_perc(
                 report[url]['time_sum'], report[url]['count']
             )
+            report[url]['med'] = []
         report[url]['count'] += 1
         report[url]['time_sum'] = round(report[url]['time_sum'] + r_time, 2)
+        report[url]['med'].append(r_time)
         if r_time > report[url]['time_max']:
             report[url]['time_max'] = r_time
 
@@ -133,8 +135,11 @@ def create_report(log_path, r_size=1000):
 
     result = sorted(
         report.values(), key=lambda entry: entry['time_sum'], reverse=True
-    )
-    return json.dumps(result[:r_size], default=lambda lazy_obj: lazy_obj())
+    )[:r_size]
+    
+    for entry in result:
+        entry['med'] = statistics.median(entry['med'])
+    return json.dumps(result, default=lambda lazy_obj: lazy_obj())
 
 
 @log_it

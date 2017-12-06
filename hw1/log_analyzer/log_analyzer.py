@@ -27,7 +27,7 @@ DEFAULT_CONF = {
 }
 
 
-DT_PATTERN = re.compile(r'(?P<Y>\d{4})(?P<m>\d{2})(?P<d>\d{2})')
+DT_PATTERN = re.compile(r'.*(?P<Y>\d{4})(?P<m>\d{2})(?P<d>\d{2})')
 LOG_PATTERN = re.compile(
             r'(?P<remote_addr>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s'
             r'(?P<remote_user>\S+)\s+'
@@ -79,18 +79,18 @@ def parse(entry, pattern=LOG_PATTERN, fields=FIELDS,
 def scan_dir(dir_path, file_name_pattern, dt_pattern=DT_PATTERN):
     log_files = glob.glob(os.path.join(dir_path, file_name_pattern))
     try:
-        return max(log_files, key=lambda file: dt_pattern.match(file))
+        return max(log_files, key=lambda file: dt_pattern.match(file).group(0))
     except ValueError:
         return
 
 
 def read_file(path):
     if path.endswith('gz'):
-        log_file = gzip.open(path, 'rb', encoding='utf-8')
+        log_file = gzip.open(path, 'rb')
     else:
-        log_file = open(path, 'r', encoding='utf-8')
+        log_file = open(path, 'rb')
     for line in log_file:
-        yield line
+        yield line.decode('utf-8')
     log_file.close()
 
 
@@ -212,7 +212,8 @@ if __name__ == "__main__":
     logging.basicConfig(
         format='[%(asctime)s] %(levelname).1s %(message)s',
         datefmt='%Y.%m.%d %H:%M:%S',
-        handlers=[handler]
+        handlers=[handler],
+        level=logging.INFO
     )
 
     start_time = datetime.now()

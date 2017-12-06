@@ -11,6 +11,8 @@ time_avg - средний $request_time для данного URL'а
 time_max - максимальный $request_time для данного URL'а
 time_med - медиана $request_time для данного URL'а
 ```
+## Version 0.2.0
+
 ## Python requirements
 Python 3.5 or later.
 

@@ -47,20 +47,6 @@ FIELDS = ('request', 'request_time', )
 PARSERS = {'request': lambda r: r.split(' ')[1]}
 
 
-def log_it(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        try:
-            logging.info("Started: {}.".format(fn.__name__))
-            result = fn(*args, **kwargs)
-            logging.info("Finished: {}.".format(fn.__name__))
-            return result
-        except Exception as exc:
-            logging.exception("Error in {}".format(fn.__name__))
-            raise exc
-    return wrapper
-
-
 def parse(entry, pattern=LOG_PATTERN, fields=FIELDS,
           parsers=PARSERS):
     parsed_entry = pattern.match(entry)
@@ -75,7 +61,6 @@ def parse(entry, pattern=LOG_PATTERN, fields=FIELDS,
         return {field: parsed_entry.get(field) for field in fields}
 
 
-@log_it
 def scan_dir(dir_path, file_name_pattern, dt_pattern=DT_PATTERN):
     log_files = glob.glob(os.path.join(dir_path, file_name_pattern))
     try:
@@ -102,47 +87,50 @@ def get_mid(value, total, ndigits=2):
     return round(total / value, ndigits)
 
 
-@log_it
-def create_report(log_path, r_size=1000):
-    r_total = 0
-    t_all = 0
-    report = defaultdict(lambda: defaultdict(lambda: 0))
+def add_report_line(report, url, request_time):
+    if url not in report:
+        report[url] = defaultdict(lambda: 0)
+        report[url]['med'] = []
+    report[url]['count'] += 1
+    report[url]['time_sum'] = round(report[url]['time_sum'] + request_time, 2)
+    report[url]['med'].append(request_time)
+    if request_time > report[url]['time_max']:
+        report[url]['time_max'] = request_time
+
+
+def build_statistic(entries, total_requests, requests_time, r_size):
+    result = sorted(
+        entries.values(), key=lambda entry: entry.get('time_sum', 0),
+        reverse=True
+    )[:r_size]
+    for entry in result:
+        try:
+            entry['med'] = statistics.median(entry['med'])
+            entry['count_perc'] = get_perc(entry['count'], total_requests)
+            entry['time_perc'] = get_perc(entry['time_sum'], requests_time)
+            entry['time_avg'] = get_perc(entry['time_sum'], entry['count'])
+        except KeyError:
+            logging.error(
+                'The reports entry should have the count, time_sum and med!'
+            )
+    return json.dumps(result)
+
+
+def create_report(log_path, r_size):
+    total_requests = 0
+    total_requests_time = 0
+    report = {}
     for entry in (parse(line) for line in read_file(log_path)):
         if entry is None:
             continue
-
         url = entry.get('request') or '-'
-        r_time = float(entry.get('request_time')) or float(0)
-        if url not in report:
-            report[url]['count_perc'] = lambda: get_perc(
-                report[url]['count'], r_total
-            ),
-            report[url]['time_perc'] = lambda: get_perc(
-                report[url]['time_sum'], t_all
-            ),
-            report[url]['time_avg'] = lambda: get_perc(
-                report[url]['time_sum'], report[url]['count']
-            )
-            report[url]['med'] = []
-        report[url]['count'] += 1
-        report[url]['time_sum'] = round(report[url]['time_sum'] + r_time, 2)
-        report[url]['med'].append(r_time)
-        if r_time > report[url]['time_max']:
-            report[url]['time_max'] = r_time
-
-        r_total += 1
-        t_all = round(t_all + r_time, 2)
-
-    result = sorted(
-        report.values(), key=lambda entry: entry['time_sum'], reverse=True
-    )[:r_size]
-    
-    for entry in result:
-        entry['med'] = statistics.median(entry['med'])
-    return json.dumps(result, default=lambda lazy_obj: lazy_obj())
+        total_requests += 1
+        request_time = float(entry.get('request_time')) or float(0)
+        total_requests_time += request_time
+        add_report_line(report, url, request_time)
+    return build_statistic(report, total_requests, total_requests_time, r_size)
 
 
-@log_it
 def save_report(report, report_path):
     with open('./templates/report.html', 'r', encoding='utf-8') as f:
         template = f.read()
@@ -171,8 +159,10 @@ def parse_args():
     return config
 
 
-@log_it
-def main(logs_dir, reports_dir, report_size):
+def main(config):
+    logs_dir = config['log_dir']
+    reports_dir = config['report_dir']
+    report_size = config['report_size']
     log_template = 'nginx-access-ui*'
     report_template = 'report-{Y}.{m}.{d}.html'
 
@@ -190,7 +180,7 @@ def main(logs_dir, reports_dir, report_size):
     )
     report_path = os.path.join(reports_dir, report_name)
     if not os.path.exists(report_path):
-        report = create_report(log_path)
+        report = create_report(log_path, report_size)
         save_report(report, report_path)
     else:
         logging.error('Log {} has already been handled!'.format(log_path))
@@ -204,20 +194,15 @@ if __name__ == "__main__":
     from configparser import RawConfigParser
 
     config = parse_args()
-    log_file = config.get('log_file')
-    if log_file is not None:
-        handler = logging.FileHandler(log_file)
-    else:
-        handler = logging.StreamHandler()
     logging.basicConfig(
         format='[%(asctime)s] %(levelname).1s %(message)s',
         datefmt='%Y.%m.%d %H:%M:%S',
-        handlers=[handler],
+        filename=config.get('log_file'),
         level=logging.INFO
     )
 
     start_time = datetime.now()
-    main(config['log_dir'], config['report_dir'], config['report_size'])
+    main(config)
     end_time = datetime.now()
     
     with open(config['ts_file'], 'w', encoding='utf-8') as f:
